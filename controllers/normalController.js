@@ -29,7 +29,7 @@ module.exports = {
   async updateOrder(req, res) {
     try {
       const { orderId } = req.params;
-      console.log(orderId);
+      // console.log(orderId);
       const updatedOrder = await orderModel.findOneAndUpdate(
         { order_id: orderId },
         {
@@ -43,7 +43,7 @@ module.exports = {
           status: "fail",
         });
       }
-      console.log(updatedOrder);
+      // console.log(updatedOrder);
       const order = await orderModel.findOne({ order_id: orderId });
       return res.status(201).send({
         status: "success",
@@ -60,9 +60,9 @@ module.exports = {
   async deleteOrder(req, res) {
     try {
       const { orderId } = req.params;
-      console.log(orderId);
+      // console.log(orderId);
       const order = await orderModel.findOneAndDelete({ order_id: orderId });
-      console.log(order);
+      // console.log(order);
       if (order) {
         return res.status(201).send({
           status: "success",
@@ -83,9 +83,9 @@ module.exports = {
   async searchOrder(req, res) {
     try {
       const { order_id } = req.query;
-      console.log(order_id);
+      // console.log(order_id);
       const order = await orderModel.findOne({ order_id: order_id });
-      console.log(order);
+      // console.log(order);
       if (order) {
         return res.status(201).send({
           status: "success",
@@ -106,8 +106,16 @@ module.exports = {
   async getOrderList(req, res) {
     try {
       const { order_date } = req.query;
-      console.log(order_date);
+      // console.log(order_date);
       // orderModel.find({})
+      const validateDate = Date.parse(order_date);
+      // console.log(validateDate)
+      if(isNaN(validateDate)){
+        return res.status(401).send({
+          status:"fail",
+          msg:"Please give date in YYYY/MM/DD format"
+        })
+      }
       const allorders = await orderModel.find({ order_date: order_date });
       if(allorders.length){
 
