@@ -1,249 +1,131 @@
-const courseModel = require("../models/courseModel");
-const userModel = require("../models/userModel");
-const convert = require("../converter");
-const cloudinary = require("../cloudinary");
-const { image } = require("../cloudinary");
-const videoModel = require("../models/videoModel");
-const purchaseModel = require("../models/PurchasesCourse");
-const paypal = require("paypal-rest-sdk");
+const orderModel = require("../models/orderModel");
 
 module.exports = {
-  async uploadVideo(req, res) {
-    try {
-      console.log(req.files);
-      console.log(req.body);
-      const { title, description, videoUrl } = req.body;
-      let videoFile = [];
-      let imageContentProfileImage = [];
-      req.files.forEach((file) => {
-        imageContentProfileImage.push(convert(file.originalname, file.buffer));
-      });
-      console.log(Object.keys(imageContentProfileImage));
-      videoFile = await Promise.all(
-        imageContentProfileImage.map(async (videoUrl) => {
-          return await cloudinary.uploader.upload(videoUrl, {
-            resource_type: "video",
-          });
-        })
-      );
-      console.log("videoFile", videoFile);
-
-      let videoPostFile = await Promise.all(
-        videoFile.map((job) => {
-          return job.secure_url;
-        })
-      );
-      console.log(videoPostFile);
-      const user = await videoModel.find({ courseId: req.params.courseId });
-      console.log("hi");
-      const newVideo = new videoModel({
-        title,
-        description,
-        courseId: req.params.courseId,
-        videoLink: videoPostFile,
-      });
-
-      const videoPost = await newVideo.save();
-      return res.status(200).send({
-        msg: "Your video has been posted successfully !!!",
-        videoPost,
-      });
-    } catch (err) {
-      return res.status(400).send({
-        msg: err.message,
-      });
-    }
-  },
-
-  async createCourse(req, res) {
-    console.log(req.userId);
-    try {
-      const course = new courseModel({
-        ...req.body,
-        userId: req.userId,
-      });
-      const courseCreated = await course.save();
-
-      return res.status(200).send({
-        msg: "Course created sucessfully ",
-        courseCreated,
-      });
-    } catch (err) {
-      return res.status(500).send({
-        msg: err.message,
-        status: "fail",
-      });
-    }
-  },
-  async getAllCourse(req, res) {
-    try {
-      const courses = await courseModel.find({ userId: req.userId });
-      console.log(courses);
-      return res.status(200).send({
-        courses: courses,
-      });
-    } catch (err) {
-      return res.status(500).send({
-        msg: err.message,
-        status: "fail",
-      });
-    }
-  },
-
-  async getUserImage(req, res) {
-    const userData = await userModel
-      .findById(req.userId)
-      .populate({ path: "image", match: { privacy: false } });
-    console.log("user Data=", userData);
+  async testRoute(req, res) {
     return res.send({
-      userData: userData.image,
+      msg: "Sucessfull Hello",
     });
   },
-  async getAllCourseById(req, res) {
+  async createOrder(req, res) {
     try {
-      const video = await videoModel.find({ courseId: req.params.courseId });
+      const newOrder = new orderModel({
+        ...req.body,
+      });
+      const savedOrder = await newOrder.save();
       return res.status(200).send({
-        video,
+        msg: "order saved sucessfully",
+        status: "success",
+        order: savedOrder,
       });
     } catch (err) {
-      return res.status(500).send({
-        msg: err.message,
-        status: "fail",
-      });
+      if (err.message.includes("order_id_1 dup key")) {
+        return res.status(403).send({
+          status: "fail",
+          msg: "duplicate order id is not permitted",
+        });
+      }
     }
   },
-  async getAllCoursesToUser(req, res) {
+  async updateOrder(req, res) {
     try {
-      const courses = await courseModel.find({});
-      return res.status(200).send({
-        courses,
-      });
-    } catch (err) {
-      return res.status(500).send({
-        msg: err.message,
-        status: "fail",
-      });
-    }
-  },
-  async purchaseCourse(req, res) {
-    try {
-    } catch (err) {}
-  },
-
-  async sortByCategory(req, res) {
-    const { sortBy } = req.query;
-    try {
-      const course = await courseModel.find({ category: sortBy });
-      console.log(course);
-      return res.status(200).send({
-        course,
-      });
-    } catch (err) {
-      return res.status(500).send({
-        msg: err.message,
-        status: "fail",
-      });
-    }
-  },
-
-  async payment(req, res) {
-    const { courseId } = req.query;
-    console.log(courseId);
-    const course = await courseModel.findById(courseId);
-    console.log("course", course);
-
-    const create_payment_json = {
-      intent: "sale",
-      payer: {
-        payment_method: "paypal",
-      },
-      redirect_urls: {
-        return_url: `http://localhost:3000/paymentDone/${courseId}`,
-        cancel_url: "http://localhost:3000/paymentDone",
-      },
-      transactions: [
+      const { orderId } = req.params;
+      console.log(orderId);
+      const updatedOrder = await orderModel.findOneAndUpdate(
+        { order_id: orderId },
         {
-          item_list: {
-            items: [
-              {
-                name: `${course.courseName}`,
-                sku: "001",
-                price: `${course.price}`,
-                currency: "INR",
-                quantity: 1,
-              },
-            ],
-          },
-          amount: {
-            currency: "INR",
-            total: `${course.price}`,
-          },
-          description: "Hat for the best team ever",
+          ...req.body,
         },
-      ],
-    };
-
-    paypal.payment.create(create_payment_json, function (error, payment) {
-      if (error) {
-        throw error;
-      } else {
-        for (let i = 0; i < payment.links.length; i++) {
-          if (payment.links[i].rel === "approval_url") {
-            res.json({ forwardLink: payment.links[i].href });
-          }
-        }
+        { new: true }
+      );
+      if (!updatedOrder) {
+        return res.status(401).send({
+          msg: "Cannot find the order",
+          status: "fail",
+        });
       }
-    });
+      console.log(updatedOrder);
+      const order = await orderModel.findOne({ order_id: orderId });
+      return res.status(201).send({
+        status: "success",
+        msg: "updated sucessfully",
+        order,
+      });
+    } catch (err) {
+      return res.status(500).send({
+        status: "fail",
+        msg: err.message,
+      });
+    }
   },
-  async success(req, res) {
-    var paymentId = req.query.paymentId;
-    var payerId = { payer_id: req.query.PayerID };
-    const { courseId } = req.params;
-
-    const course = await courseModel.findById(courseId);
-    console.log(course._id);
-    console.log(req.params.userId);
-
-    const purchase = new purchaseModel({
-      courseId:course._id,
-      userId:req.params.userId
-    });
-    course.revenueChecking++;
-
-    await course.save();
-
-    console.log(await purchase.save());
-
-
-    paypal.payment.execute(paymentId, payerId, function (error, payment) {
-      if (error) {
-        console.error(JSON.stringify(error));
-      } else {
-        if (payment.state == "approved") {
-          console.log("payment completed successfully");
-        } else {
-          console.log("payment not successful");
-        }
+  async deleteOrder(req, res) {
+    try {
+      const { orderId } = req.params;
+      console.log(orderId);
+      const order = await orderModel.findOneAndDelete({ order_id: orderId });
+      console.log(order);
+      if (order) {
+        return res.status(201).send({
+          status: "success",
+          msg: "deleted sucessfully",
+        });
       }
-    });
+      return res.status(401).send({
+        msg: "Cannot find the order please enter correct order id",
+        status: "fail",
+      });
+    } catch (err) {
+      return res.status(500).send({
+        status: "fail",
+        msg: err.message,
+      });
+    }
   },
-  async cancel(req, res) {
-    return res.send("Cancelled");
+  async searchOrder(req, res) {
+    try {
+      const { order_id } = req.query;
+      console.log(order_id);
+      const order = await orderModel.findOne({ order_id: order_id });
+      console.log(order);
+      if (order) {
+        return res.status(201).send({
+          status: "success",
+          order,
+        });
+      }
+      return res.status(401).send({
+        msg: "Cannot find the order please enter correct order id",
+        status: "fail",
+      });
+    } catch (err) {
+      return res.status(500).send({
+        status: "fail",
+        msg: err.message,
+      });
+    }
   },
+  async getOrderList(req, res) {
+    try {
+      const { order_date } = req.query;
+      console.log(order_date);
+      // orderModel.find({})
+      const allorders = await orderModel.find({ order_date: order_date });
+      if(allorders.length){
 
-  async purchasedItem(req,res){
-    try{
-      const purchasedItem = await purchaseModel.find({userId:req.userId});
-      console.log(purchasedItem);
-      return res.status(200).send({
-        purchasedItem
+        return res.status(201).send({
+          status: "success",
+          order:allorders
+        });
+      }
+      return res.status(401).send({
+        status:"fail",
+        msg:`no order is aviable on ${order_date}`
       })
 
-    }catch(err){
+    } catch (err) {
       return res.status(500).send({
-        msg: err.message,
         status: "fail",
+        msg: err.message,
       });
     }
-  }
+  },
 };
